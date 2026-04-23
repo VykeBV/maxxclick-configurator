@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Maxxclick — 3D Configurator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.161.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.161.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar" id="sidebar">
+        <div class="brand">
+          <div class="brand-mark">M</div>
+          <div class="brand-text">
+            <div class="brand-title">Maxxclick</div>
+            <div class="brand-sub">3D Configurator</div>
+          </div>
+        </div>
+
+        <div class="section-label">Rail</div>
+        <div class="rail-info">
+          <div class="rail-info-title">Steel Rail · 58 cm</div>
+          <div class="rail-info-sub">Base component · €9.99</div>
+        </div>
+
+        <div class="section-label">Attachments · drag onto rail</div>
+        <div class="product-list" id="product-list"></div>
+
+        <div class="sidebar-footer">
+          <button class="btn-clear" id="btn-clear">Clear all</button>
+          <button class="btn-reset" id="btn-reset">Reset view</button>
+        </div>
+      </aside>
+
+      <main class="stage">
+        <canvas id="scene"></canvas>
+
+        <div class="stage-hud">
+          <div class="hud-pill" id="hud-count">0 attachments placed</div>
+          <div class="hud-hint" id="hud-hint">Drag an attachment from the left onto the rail</div>
+        </div>
+
+        <div class="drop-overlay" id="drop-overlay">
+          <div class="drop-overlay-inner">
+            <div class="drop-icon">+</div>
+            <div class="drop-text">Release to place on rail</div>
+          </div>
+        </div>
+
+        <div class="hover-chip" id="hover-chip">
+          <button class="hover-btn hover-move" id="hover-move" title="Move">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M8 2v12M2 8h12M8 2l-2 2M8 2l2 2M8 14l-2-2M8 14l2-2M2 8l2-2M2 8l2 2M14 8l-2-2M14 8l-2 2" />
+            </svg>
+          </button>
+          <button class="hover-btn hover-delete" id="hover-delete" title="Remove">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M4 4l8 8M12 4l-8 8" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="loader" id="loader">
+          <div class="loader-spinner"></div>
+          <div class="loader-text">Loading 3D scene…</div>
+        </div>
+
+        <div class="toast" id="toast"></div>
+      </main>
+
+      <aside class="cart-panel" id="cart-panel">
+        <div class="cart-header">
+          <div class="cart-title">Your build</div>
+          <div class="cart-sub" id="cart-sub">Empty</div>
+        </div>
+        <div class="cart-items" id="cart-items">
+          <div class="cart-empty">No items yet — drag products onto the wall.</div>
+        </div>
+        <div class="cart-footer">
+          <div class="cart-total-row">
+            <span>Total</span>
+            <span class="cart-total" id="cart-total">€0.00</span>
+          </div>
+          <button class="btn-cart" id="btn-cart" disabled>Add all to cart</button>
+        </div>
+      </aside>
+    </div>
+
+    <script type="module" src="configurator.js"></script>
+  </body>
+</html>
