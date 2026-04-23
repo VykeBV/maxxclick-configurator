@@ -24,20 +24,11 @@
     <div class="app">
       <aside class="sidebar" id="sidebar">
         <div class="brand">
-          <div class="brand-mark">M</div>
-          <div class="brand-text">
-            <div class="brand-title">Maxxclick</div>
-            <div class="brand-sub">3D Configurator</div>
-          </div>
+          <img src="assets/batavia-logo.svg" alt="Batavia" class="brand-logo" />
+          <div class="brand-sub">Maxxclick · 3D Configurator</div>
         </div>
 
-        <div class="section-label">Rail</div>
-        <div class="rail-info">
-          <div class="rail-info-title">Steel Rail · 58 cm</div>
-          <div class="rail-info-sub">Base component · €9.99</div>
-        </div>
-
-        <div class="section-label">Attachments · drag onto rail</div>
+        <div class="section-label">Products · click or drag</div>
         <div class="product-list" id="product-list"></div>
 
         <div class="sidebar-footer">
@@ -83,19 +74,27 @@
       </main>
 
       <aside class="cart-panel" id="cart-panel">
-        <div class="cart-header">
-          <div class="cart-title">Your build</div>
-          <div class="cart-sub" id="cart-sub">Empty</div>
-        </div>
-        <div class="cart-items" id="cart-items">
-          <div class="cart-empty">No items yet — drag products onto the wall.</div>
-        </div>
-        <div class="cart-footer">
-          <div class="cart-total-row">
-            <span>Total</span>
-            <span class="cart-total" id="cart-total">€0.00</span>
+        <button class="cart-toggle" id="cart-toggle" aria-label="Toggle cart">
+          <div class="cart-toggle-main">
+            <div class="cart-toggle-label">Your build</div>
+            <div class="cart-sub" id="cart-sub">Empty</div>
           </div>
-          <button class="btn-cart" id="btn-cart" disabled>Add all to cart</button>
+          <div class="cart-toggle-total" id="cart-toggle-total">€0.00</div>
+          <svg class="cart-toggle-chevron" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 10l4-4 4 4" />
+          </svg>
+        </button>
+        <div class="cart-body">
+          <div class="cart-items" id="cart-items">
+            <div class="cart-empty">No items yet — click or drag a product onto the wall.</div>
+          </div>
+          <div class="cart-footer">
+            <div class="cart-total-row">
+              <span>Total</span>
+              <span class="cart-total" id="cart-total">€0.00</span>
+            </div>
+            <button class="btn-cart" id="btn-cart" disabled>Add all to cart</button>
+          </div>
         </div>
       </aside>
     </div>

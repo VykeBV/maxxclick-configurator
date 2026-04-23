@@ -51,7 +51,10 @@ const btnReset = document.getElementById('btn-reset');
 const stageEl = canvas.parentElement;
 const cartItemsEl = document.getElementById('cart-items');
 const cartTotalEl = document.getElementById('cart-total');
+const cartToggleTotalEl = document.getElementById('cart-toggle-total');
 const cartSubEl = document.getElementById('cart-sub');
+const cartPanelEl = document.getElementById('cart-panel');
+const cartToggleBtn = document.getElementById('cart-toggle');
 const btnCart = document.getElementById('btn-cart');
 const hoverChip = document.getElementById('hover-chip');
 const hoverMoveBtn = document.getElementById('hover-move');
@@ -190,10 +193,10 @@ function makeGhost(source) {
       o.castShadow = false;
       o.receiveShadow = false;
       o.material = new THREE.MeshStandardMaterial({
-        color: 0xff7a1a,
+        color: 0xf49b00,
         transparent: true,
         opacity: 0.55,
-        emissive: 0xff7a1a,
+        emissive: 0xf49b00,
         emissiveIntensity: 0.35,
         roughness: 0.4,
         metalness: 0.2,
@@ -281,7 +284,7 @@ async function spawnRail(worldX, worldY) {
 }
 
 /* ---------------- Dimension annotations (per connected chain of rails) ---------------- */
-const DIM_COLOR = 0xff7a1a;
+const DIM_COLOR = 0xf49b00;
 const CHAIN_SAME_Y = 0.08; // within 8 cm vertically
 const CHAIN_TOUCH = 0.04;  // within 4 cm edge-to-edge → treated as joined
 
@@ -578,7 +581,7 @@ function avoidOverlap(x, halfW, rail, excludeMesh) {
 function setGhostValidity(fits) {
   ghostGroup.traverse((o) => {
     if (o.isMesh && o.material) {
-      const col = fits ? 0xff7a1a : 0xff4d4d;
+      const col = fits ? 0xf49b00 : 0xff4d4d;
       if (o.material.color) o.material.color.setHex(col);
       if (o.material.emissive) o.material.emissive.setHex(col);
     }
@@ -770,17 +773,120 @@ function buildProductCards() {
       <div class="product-thumb" data-thumb></div>
       <div class="product-info">
         <div class="product-name">${p.name}</div>
-        <div class="product-price">${p.price} · drag to wall</div>
+        <div class="product-price">${p.price} · tap or drag</div>
       </div>
-      <div class="product-handle">⋮⋮</div>
+      <div class="product-add" aria-hidden="true">+</div>
     `;
     productListEl.appendChild(card);
 
     card.addEventListener('dragstart', (e) => onDragStart(e, p));
     card.addEventListener('dragend', () => onDragEnd(card));
 
+    // Click-to-add: primary mobile-friendly path, also works on desktop.
+    // Guarded so a drag doesn't also fire a click on release.
+    card.addEventListener('click', (e) => {
+      if (activeDragProduct) return;
+      if (card.classList.contains('dragging')) return;
+      autoPlaceProduct(p);
+    });
+
     renderThumbnail(p, card.querySelector('[data-thumb]'));
   }
+}
+
+/* ---------------- Click-to-add: auto-place products without dragging ---------------- */
+async function autoPlaceProduct(product) {
+  if (product.type === 'rail') {
+    await autoPlaceRail(product);
+  } else {
+    if (rails.length === 0) {
+      showToast('Place a rail on the wall first');
+      return;
+    }
+    await autoPlaceAttachment(product);
+  }
+}
+
+// Add a new rail in the most sensible spot: chain to the rightmost rail if
+// there's room, otherwise stack a row below the lowest rail.
+async function autoPlaceRail(product) {
+  if (rails.length === 0) {
+    await spawnRail(0, 1.5);
+    showToast(`Added: ${product.name}`);
+    return;
+  }
+
+  const proto = await getPrototype(product.src);
+  const sample = cloneFromPrototype(proto);
+  const dims = normalizeRail(sample);
+  const halfW = dims.width / 2;
+  const wallHalf = WALL_WIDTH / 2 - 0.3;
+
+  const rightmost = rails.reduce((a, b) => (a.maxX > b.maxX ? a : b));
+  const candidateX = rightmost.maxX + halfW + 0.002;
+
+  if (candidateX + halfW <= wallHalf) {
+    await spawnRail(candidateX, rightmost.centerY);
+    showToast('Snapped to adjacent rail');
+    return;
+  }
+
+  const lowest = rails.reduce((a, b) => (a.centerY < b.centerY ? a : b));
+  const newY = lowest.centerY - 0.4;
+  if (newY > 0.3) {
+    await spawnRail(0, newY);
+    showToast(`Added: ${product.name}`);
+  } else {
+    showToast('Wall is full — clear something first');
+  }
+}
+
+// Place an attachment on the first rail with free room, left-to-right.
+async function autoPlaceAttachment(product) {
+  const proto = await getPrototype(product.src);
+
+  // Measure this product's width by fitting onto a reference rail.
+  const sample = cloneFromPrototype(proto);
+  fitAttachmentToRail(sample, rails[0]);
+  sample.updateMatrixWorld(true);
+  const sbb = new THREE.Box3().setFromObject(sample);
+  const halfW = (sbb.max.x - sbb.min.x) / 2;
+
+  for (const rail of rails) {
+    const ranges = rail.attachments
+      .map((m) => {
+        const b = new THREE.Box3().setFromObject(m);
+        return { min: b.min.x, max: b.max.x };
+      })
+      .sort((a, b) => a.min - b.min);
+
+    const gap = 0.01;
+    let x = rail.minX + halfW + gap;
+    let placed = false;
+    for (const r of ranges) {
+      if (x + halfW + gap <= r.min) {
+        placed = true;
+        break;
+      }
+      x = Math.max(x, r.max + halfW + gap);
+    }
+    if (!placed) placed = x + halfW + gap <= rail.maxX;
+
+    if (placed) {
+      const instance = cloneFromPrototype(proto);
+      fitAttachmentToRail(instance, rail);
+      instance.position.set(x, rail.centerY, rail.frontZ);
+      scene.add(instance);
+      rail.attachments.push(instance);
+      placedAttachments.push({ mesh: instance, rail, product });
+      showToast(`Added: ${product.name}`);
+      updateHud();
+      updateCart();
+      return;
+    }
+  }
+
+  showToast('All rails are full — add another rail');
 }
 
 /* ---------------- Thumbnails ---------------- */
@@ -887,8 +993,9 @@ function updateCart() {
   for (const r of byId.values()) rows.push(r);
 
   if (rows.length === 0) {
-    cartItemsEl.innerHTML = '<div class="cart-empty">No items yet — drag products onto the wall.</div>';
+    cartItemsEl.innerHTML = '<div class="cart-empty">No items yet — click or drag a product onto the wall.</div>';
     cartTotalEl.textContent = '€0.00';
+    cartToggleTotalEl.textContent = '€0.00';
     cartSubEl.textContent = 'Empty';
     btnCart.disabled = true;
     return;
@@ -914,9 +1021,16 @@ function updateCart() {
     cartItemsEl.appendChild(row);
   }
   cartTotalEl.textContent = `€${total.toFixed(2)}`;
+  cartToggleTotalEl.textContent = `€${total.toFixed(2)}`;
   cartSubEl.textContent = `${totalQty} item${totalQty === 1 ? '' : 's'}`;
   btnCart.disabled = false;
 }
+
+// Mobile: tap the cart header to expand/collapse the bottom sheet.
+// On desktop the toggle just acts as a static header (body is always visible).
+cartToggleBtn.addEventListener('click', () => {
+  cartPanelEl.classList.toggle('expanded');
+});
 
 btnCart.addEventListener('click', () => {
   // Placeholder — Shopify integration hooked in later.
