@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 
 /* ---------------- Product catalog ---------------- */
 const PRODUCTS = [
@@ -186,6 +187,8 @@ const placedAttachments = []; // { mesh, rail, product }
 
 /* ---------------- Model loading (cached prototypes) ---------------- */
 const loader = new GLTFLoader();
+// Optimized GLBs use EXT_meshopt_compression; this decoder lets the loader read them.
+loader.setMeshoptDecoder(MeshoptDecoder);
 const prototypeCache = new Map();
 
 function getPrototype(src) {
