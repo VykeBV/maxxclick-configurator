@@ -31,6 +31,9 @@ const PRODUCTS = [
     type: 'attachment',
   },
   // TODO: rename these once we identify which Maxxclick SKUs they are.
+  // mountStyle: 'hook' → scales so the back mount plate matches the rail's
+  //   height (the body extends naturally below); forces a matte black finish.
+  // mountStyle: 'plate' (default) → scales the whole model to a fixed height.
   {
     id: 'attachment-1',
     name: 'Attachment 1',
@@ -38,6 +41,8 @@ const PRODUCTS = [
     priceValue: 9.99,
     src: 'models/Maxxclick-attachment-1.glb',
     type: 'attachment',
+    mountStyle: 'hook',
+    forceColor: 0x161616,
   },
   {
     id: 'attachment-2',
@@ -46,6 +51,8 @@ const PRODUCTS = [
     priceValue: 9.99,
     src: 'models/Maxxclick-attachment-2.glb',
     type: 'attachment',
+    mountStyle: 'hook',
+    forceColor: 0x161616,
   },
   {
     id: 'attachment-3',
@@ -268,20 +275,38 @@ function normalizeRail(clone) {
   };
 }
 
-// Fit an attachment to a rail: the GLBs are authored with the tool-facing side
-// at +Z, but mounted on a wall-rail we want the tool-facing side pointing OUT,
-// away from the wall. So we rotate 180° around Y, then auto-scale so the model
-// height lands in a sane range relative to the rail (different source models
-// come at wildly different scales), then shift the origin so the back face
-// — which is now the original +Z face — lands at local z=0. Setting world
-// position to (railX, railCenterY, railFrontZ) flushes the mounting face to
-// the rail front, and the tool/body extends forward toward the camera.
-const ATTACHMENT_TARGET_HEIGHT = 0.16; // ~16 cm, typical for a Maxxclick accessory
-function fitAttachmentToRail(obj, _rail) {
+// Fit an attachment to a rail. All GLBs are first rotated 180° around Y so the
+// tool-facing side (authored at +Z) ends up pointing away from the wall.
+//
+// Two scaling strategies:
+//
+//   mountStyle: 'hook' — slice the vertices closest to the back face (the
+//     mount plate) and uniformly scale the whole model so that slice's Y range
+//     matches the rail's own height. The hook body then proportionally extends
+//     below the rail, which is how Maxxclick hooks actually clip on.
+//
+//   mountStyle: 'plate' (default) — scale uniformly so the model's full Y
+//     dimension hits ATTACHMENT_TARGET_HEIGHT. Right for monolithic items like
+//     the tool-and-battery adapter or storage bins whose back face spans the
+//     whole height.
+//
+// Origin is positioned so back-face center → local (0,0,0); the caller places
+// the world position at (railX, railCenterY, railFrontZ) to flush-mount.
+const ATTACHMENT_TARGET_HEIGHT = 0.16; // ~16 cm — Maxxclick adapter/bins scale
+const HOOK_BACK_SLICE_FRAC = 0.08;     // sample first 8% of depth for mount-plate Y range
+
+function fitAttachmentToRail(obj, rail, product) {
   obj.rotation.y = Math.PI;
   obj.updateMatrixWorld(true);
 
-  // Normalize by Y so attachments authored at any scale come out the same size
+  if (product && product.mountStyle === 'hook') {
+    fitHookToRail(obj, rail);
+  } else {
+    fitPlateToRail(obj);
+  }
+}
+
+function fitPlateToRail(obj) {
   const raw = new THREE.Box3().setFromObject(obj);
   const rawSize = raw.getSize(new THREE.Vector3());
   const scale = ATTACHMENT_TARGET_HEIGHT / Math.max(rawSize.y, 0.001);
@@ -290,10 +315,78 @@ function fitAttachmentToRail(obj, _rail) {
 
   const bb = new THREE.Box3().setFromObject(obj);
   const center = bb.getCenter(new THREE.Vector3());
-
   obj.position.x -= center.x;
   obj.position.y -= center.y;
   obj.position.z -= bb.min.z;
+}
+
+function fitHookToRail(obj, rail) {
+  // Scale uniformly so the whole hook is a sensible size (same as plate-style).
+  // Sizing the hook from "back-slice Y range = rail Y" doesn't work — when the
+  // model's back face is smaller than the rail it scales up to absurd widths.
+  const raw = new THREE.Box3().setFromObject(obj);
+  const rawSize = raw.getSize(new THREE.Vector3());
+  const scale = ATTACHMENT_TARGET_HEIGHT / Math.max(rawSize.y, 0.001);
+  obj.scale.setScalar(scale);
+  obj.updateMatrixWorld(true);
+
+  // Position so the mount plate's vertical centre — not the whole model's
+  // centre — sits at the rail's centre line. The hook body then hangs below
+  // the rail, which is how Maxxclick hooks actually look when clipped on.
+  const back = measureBackFace(obj, HOOK_BACK_SLICE_FRAC);
+  const backCenterY = (back.minY + back.maxY) / 2;
+
+  const bb = new THREE.Box3().setFromObject(obj);
+  const xCenter = (bb.min.x + bb.max.x) / 2;
+  obj.position.x -= xCenter;
+  obj.position.y -= backCenterY;
+  obj.position.z -= bb.min.z;
+}
+
+const _tmpV = new THREE.Vector3();
+function measureBackFace(obj, sliceFrac) {
+  const bb = new THREE.Box3().setFromObject(obj);
+  const backZThreshold = bb.min.z + (bb.max.z - bb.min.z) * sliceFrac;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  let any = false;
+
+  obj.traverse((o) => {
+    if (!o.isMesh || !o.geometry) return;
+    o.updateMatrixWorld(true);
+    const pos = o.geometry.attributes.position;
+    if (!pos) return;
+    for (let i = 0; i < pos.count; i++) {
+      _tmpV.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+      if (_tmpV.z <= backZThreshold) {
+        if (_tmpV.y < minY) minY = _tmpV.y;
+        if (_tmpV.y > maxY) maxY = _tmpV.y;
+        any = true;
+      }
+    }
+  });
+
+  // Fallback: if somehow we sampled nothing, use the full Y range so we don't divide by zero.
+  if (!any) {
+    minY = bb.min.y;
+    maxY = bb.max.y;
+  }
+  return { minY, maxY };
+}
+
+// Override all materials on a clone with a flat coloured PBR material.
+// Used for hooks where we want a uniform matte black finish, ignoring the
+// source GLB's painted textures.
+function applyForceColor(root, hex) {
+  root.traverse((o) => {
+    if (o.isMesh) {
+      o.material = new THREE.MeshStandardMaterial({
+        color: hex,
+        roughness: 0.55,
+        metalness: 0.35,
+      });
+    }
+  });
 }
 
 /* ---------------- Spawn a rail at (worldX, worldY) on the wall ---------------- */
@@ -495,7 +588,7 @@ async function onDragStart(e, product) {
     };
   } else {
     const refRail = rails[0];
-    fitAttachmentToRail(ghost, refRail);
+    fitAttachmentToRail(ghost, refRail, product);
     ghostGroup.add(ghost);
     ghost.updateMatrixWorld(true);
     const gbb = new THREE.Box3().setFromObject(ghost);
@@ -694,7 +787,8 @@ stageEl.addEventListener('drop', async (e) => {
     } else {
       const proto = await getPrototype(activeDragProduct.src);
       const instance = cloneFromPrototype(proto);
-      fitAttachmentToRail(instance, result.rail);
+      if (activeDragProduct.forceColor !== undefined) applyForceColor(instance, activeDragProduct.forceColor);
+      fitAttachmentToRail(instance, result.rail, activeDragProduct);
       instance.position.set(result.x, result.rail.centerY, result.rail.frontZ);
       scene.add(instance);
       result.rail.attachments.push(instance);
@@ -894,7 +988,7 @@ async function autoPlaceAttachment(product) {
 
   // Measure this product's width by fitting onto a reference rail.
   const sample = cloneFromPrototype(proto);
-  fitAttachmentToRail(sample, rails[0]);
+  fitAttachmentToRail(sample, rails[0], product);
   sample.updateMatrixWorld(true);
   const sbb = new THREE.Box3().setFromObject(sample);
   const halfW = (sbb.max.x - sbb.min.x) / 2;
@@ -921,7 +1015,8 @@ async function autoPlaceAttachment(product) {
 
     if (placed) {
       const instance = cloneFromPrototype(proto);
-      fitAttachmentToRail(instance, rail);
+      if (product.forceColor !== undefined) applyForceColor(instance, product.forceColor);
+      fitAttachmentToRail(instance, rail, product);
       instance.position.set(x, rail.centerY, rail.frontZ);
       scene.add(instance);
       rail.attachments.push(instance);
