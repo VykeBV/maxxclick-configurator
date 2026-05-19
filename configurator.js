@@ -21,6 +21,7 @@ const PRODUCTS = [
     priceValue: 24.99,
     src: 'models/Maxxclick-adapter.glb',
     type: 'attachment',
+    rotationY: Math.PI,
   },
   {
     id: 'bins',
@@ -29,6 +30,7 @@ const PRODUCTS = [
     priceValue: 9.99,
     src: 'models/Batavia_Maxxclick_Storage_Bins.glb',
     type: 'attachment',
+    rotationY: 0,
   },
   // TODO: rename these once we identify which Maxxclick SKUs they are.
   // mountStyle: 'hook' → scales so the back mount plate matches the rail's
@@ -41,7 +43,7 @@ const PRODUCTS = [
     priceValue: 9.99,
     src: 'models/Maxxclick-attachment-1.glb',
     type: 'attachment',
-    mountStyle: 'hook',
+    rotationY: Math.PI,
     forceColor: 0x161616,
   },
   {
@@ -51,7 +53,7 @@ const PRODUCTS = [
     priceValue: 9.99,
     src: 'models/Maxxclick-attachment-2.glb',
     type: 'attachment',
-    mountStyle: 'hook',
+    rotationY: Math.PI,
     forceColor: 0x161616,
   },
   {
@@ -61,6 +63,7 @@ const PRODUCTS = [
     priceValue: 9.99,
     src: 'models/Maxxclick-attachment-3.glb',
     type: 'attachment',
+    rotationY: 0,
   },
   {
     id: 'attachment-4',
@@ -69,6 +72,7 @@ const PRODUCTS = [
     priceValue: 9.99,
     src: 'models/Maxxclick-attachment-4.glb',
     type: 'attachment',
+    rotationY: 0,
   },
 ];
 const PRODUCT_BY_ID = Object.fromEntries(PRODUCTS.map((p) => [p.id, p]));
@@ -275,103 +279,30 @@ function normalizeRail(clone) {
   };
 }
 
-// Fit an attachment to a rail. All GLBs are first rotated 180° around Y so the
-// tool-facing side (authored at +Z) ends up pointing away from the wall.
-//
-// Two scaling strategies:
-//
-//   mountStyle: 'hook' — slice the vertices closest to the back face (the
-//     mount plate) and uniformly scale the whole model so that slice's Y range
-//     matches the rail's own height. The hook body then proportionally extends
-//     below the rail, which is how Maxxclick hooks actually clip on.
-//
-//   mountStyle: 'plate' (default) — scale uniformly so the model's full Y
-//     dimension hits ATTACHMENT_TARGET_HEIGHT. Right for monolithic items like
-//     the tool-and-battery adapter or storage bins whose back face spans the
-//     whole height.
-//
-// Origin is positioned so back-face center → local (0,0,0); the caller places
-// the world position at (railX, railCenterY, railFrontZ) to flush-mount.
-const ATTACHMENT_TARGET_HEIGHT = 0.16; // ~16 cm — Maxxclick adapter/bins scale
-const HOOK_BACK_SLICE_FRAC = 0.08;     // sample first 8% of depth for mount-plate Y range
+// Fit an attachment to a rail. Each product specifies its own rotation around
+// Y (the source GLBs come authored in different orientations), then we scale
+// uniformly so the model is a consistent visual height and anchor it so the
+// model's TOP edge maps to local (0,0,0). The caller then sets the world
+// position to (railX, rail.bbox.max.y, rail.frontZ) — top of attachment lines
+// up with top of rail, back face flush, body hanging below. That matches how
+// Maxxclick accessories physically clip onto the rail.
+const ATTACHMENT_TARGET_HEIGHT = 0.16; // ~16 cm — Maxxclick accessory scale
 
-function fitAttachmentToRail(obj, rail, product) {
-  obj.rotation.y = Math.PI;
+function fitAttachmentToRail(obj, _rail, product) {
+  obj.rotation.y = product?.rotationY ?? 0;
   obj.updateMatrixWorld(true);
 
-  if (product && product.mountStyle === 'hook') {
-    fitHookToRail(obj, rail);
-  } else {
-    fitPlateToRail(obj);
-  }
-}
-
-function fitPlateToRail(obj) {
   const raw = new THREE.Box3().setFromObject(obj);
   const rawSize = raw.getSize(new THREE.Vector3());
   const scale = ATTACHMENT_TARGET_HEIGHT / Math.max(rawSize.y, 0.001);
   obj.scale.setScalar(scale);
   obj.updateMatrixWorld(true);
-
-  const bb = new THREE.Box3().setFromObject(obj);
-  const center = bb.getCenter(new THREE.Vector3());
-  obj.position.x -= center.x;
-  obj.position.y -= center.y;
-  obj.position.z -= bb.min.z;
-}
-
-function fitHookToRail(obj, rail) {
-  // Scale uniformly so the whole hook is a sensible size (same as plate-style).
-  // Sizing the hook from "back-slice Y range = rail Y" doesn't work — when the
-  // model's back face is smaller than the rail it scales up to absurd widths.
-  const raw = new THREE.Box3().setFromObject(obj);
-  const rawSize = raw.getSize(new THREE.Vector3());
-  const scale = ATTACHMENT_TARGET_HEIGHT / Math.max(rawSize.y, 0.001);
-  obj.scale.setScalar(scale);
-  obj.updateMatrixWorld(true);
-
-  // Position so the mount plate's vertical centre — not the whole model's
-  // centre — sits at the rail's centre line. The hook body then hangs below
-  // the rail, which is how Maxxclick hooks actually look when clipped on.
-  const back = measureBackFace(obj, HOOK_BACK_SLICE_FRAC);
-  const backCenterY = (back.minY + back.maxY) / 2;
 
   const bb = new THREE.Box3().setFromObject(obj);
   const xCenter = (bb.min.x + bb.max.x) / 2;
   obj.position.x -= xCenter;
-  obj.position.y -= backCenterY;
-  obj.position.z -= bb.min.z;
-}
-
-const _tmpV = new THREE.Vector3();
-function measureBackFace(obj, sliceFrac) {
-  const bb = new THREE.Box3().setFromObject(obj);
-  const backZThreshold = bb.min.z + (bb.max.z - bb.min.z) * sliceFrac;
-  let minY = Infinity;
-  let maxY = -Infinity;
-  let any = false;
-
-  obj.traverse((o) => {
-    if (!o.isMesh || !o.geometry) return;
-    o.updateMatrixWorld(true);
-    const pos = o.geometry.attributes.position;
-    if (!pos) return;
-    for (let i = 0; i < pos.count; i++) {
-      _tmpV.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
-      if (_tmpV.z <= backZThreshold) {
-        if (_tmpV.y < minY) minY = _tmpV.y;
-        if (_tmpV.y > maxY) maxY = _tmpV.y;
-        any = true;
-      }
-    }
-  });
-
-  // Fallback: if somehow we sampled nothing, use the full Y range so we don't divide by zero.
-  if (!any) {
-    minY = bb.min.y;
-    maxY = bb.max.y;
-  }
-  return { minY, maxY };
+  obj.position.y -= bb.max.y; // top of model → local y=0
+  obj.position.z -= bb.min.z; // back face   → local z=0
 }
 
 // Override all materials on a clone with a flat coloured PBR material.
@@ -678,7 +609,7 @@ function placePreviewAt(clientX, clientY) {
   const snap = avoidOverlap(clampedX, halfW, target, null);
 
   setGhostValidity(snap.fits);
-  ghostGroup.position.set(snap.x, target.centerY, target.frontZ);
+  ghostGroup.position.set(snap.x, target.bbox.max.y, target.frontZ);
   ghostGroup.visible = true;
   return { type: 'attachment', x: snap.x, rail: target, fits: snap.fits };
 }
@@ -789,7 +720,7 @@ stageEl.addEventListener('drop', async (e) => {
       const instance = cloneFromPrototype(proto);
       if (activeDragProduct.forceColor !== undefined) applyForceColor(instance, activeDragProduct.forceColor);
       fitAttachmentToRail(instance, result.rail, activeDragProduct);
-      instance.position.set(result.x, result.rail.centerY, result.rail.frontZ);
+      instance.position.set(result.x, result.rail.bbox.max.y, result.rail.frontZ);
       scene.add(instance);
       result.rail.attachments.push(instance);
       placedAttachments.push({ mesh: instance, rail: result.rail, product: activeDragProduct });
@@ -1017,7 +948,7 @@ async function autoPlaceAttachment(product) {
       const instance = cloneFromPrototype(proto);
       if (product.forceColor !== undefined) applyForceColor(instance, product.forceColor);
       fitAttachmentToRail(instance, rail, product);
-      instance.position.set(x, rail.centerY, rail.frontZ);
+      instance.position.set(x, rail.bbox.max.y, rail.frontZ);
       scene.add(instance);
       rail.attachments.push(instance);
       placedAttachments.push({ mesh: instance, rail, product });
@@ -1351,7 +1282,7 @@ canvas.addEventListener('pointermove', (e) => {
   const snap = avoidOverlap(clampedX, movingHalfWidth, target, movingEntry.mesh);
 
   movingValid = snap.fits;
-  movingEntry.mesh.position.set(snap.x, target.centerY, target.frontZ);
+  movingEntry.mesh.position.set(snap.x, target.bbox.max.y, target.frontZ);
   // keep rail membership in sync
   if (movingEntry.rail !== target) {
     movingEntry.rail.attachments = movingEntry.rail.attachments.filter((a) => a !== movingEntry.mesh);
