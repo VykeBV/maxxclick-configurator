@@ -279,13 +279,18 @@ function normalizeRail(clone) {
   };
 }
 
-// Fit an attachment to a rail. Each product specifies its own rotation around
-// Y (the source GLBs come authored in different orientations), then we scale
-// uniformly so the model is a consistent visual height and anchor it so the
-// model's TOP edge maps to local (0,0,0). The caller then sets the world
-// position to (railX, rail.bbox.max.y, rail.frontZ) — top of attachment lines
-// up with top of rail, back face flush, body hanging below. That matches how
-// Maxxclick accessories physically clip onto the rail.
+// Build a placeable attachment: rotate and scale the model, then wrap it in
+// an outer Group whose local origin is the attachment's TOP-BACK-CENTRE. The
+// caller sets that outer group's world position to (railX, rail.bbox.max.y,
+// rail.frontZ) — so the top of the attachment lands at the top of the rail,
+// the back face flushes to the rail front, and the body hangs below. This
+// matches how Maxxclick accessories physically clip onto the rail.
+//
+// Why the wrapper: setting `instance.position.set(...)` on a single GLB root
+// throws away any earlier `instance.position -= …` offsets, since `.set()`
+// replaces the vector. Wrapping the GLB in an outer group means the offsets
+// live on the inner (child) and `.set()` lands on the outer (parent), so the
+// shifts survive.
 const ATTACHMENT_TARGET_HEIGHT = 0.16; // ~16 cm — Maxxclick accessory scale
 
 function fitAttachmentToRail(obj, _rail, product) {
@@ -303,6 +308,15 @@ function fitAttachmentToRail(obj, _rail, product) {
   obj.position.x -= xCenter;
   obj.position.y -= bb.max.y; // top of model → local y=0
   obj.position.z -= bb.min.z; // back face   → local z=0
+}
+
+function makeAttachmentInstance(proto, product, rail) {
+  const inner = cloneFromPrototype(proto);
+  if (product.forceColor !== undefined) applyForceColor(inner, product.forceColor);
+  fitAttachmentToRail(inner, rail, product);
+  const outer = new THREE.Group();
+  outer.add(inner);
+  return outer;
 }
 
 // Override all materials on a clone with a flat coloured PBR material.
@@ -717,9 +731,7 @@ stageEl.addEventListener('drop', async (e) => {
       showToast('No room on this rail — attachments would overlap');
     } else {
       const proto = await getPrototype(activeDragProduct.src);
-      const instance = cloneFromPrototype(proto);
-      if (activeDragProduct.forceColor !== undefined) applyForceColor(instance, activeDragProduct.forceColor);
-      fitAttachmentToRail(instance, result.rail, activeDragProduct);
+      const instance = makeAttachmentInstance(proto, activeDragProduct, result.rail);
       instance.position.set(result.x, result.rail.bbox.max.y, result.rail.frontZ);
       scene.add(instance);
       result.rail.attachments.push(instance);
@@ -945,9 +957,7 @@ async function autoPlaceAttachment(product) {
     if (!placed) placed = x + halfW + gap <= rail.maxX;
 
     if (placed) {
-      const instance = cloneFromPrototype(proto);
-      if (product.forceColor !== undefined) applyForceColor(instance, product.forceColor);
-      fitAttachmentToRail(instance, rail, product);
+      const instance = makeAttachmentInstance(proto, product, rail);
       instance.position.set(x, rail.bbox.max.y, rail.frontZ);
       scene.add(instance);
       rail.attachments.push(instance);
