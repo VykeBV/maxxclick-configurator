@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Vyke — Packaging Universe</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.161.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.161.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <main class="stage">
+      <canvas id="scene"></canvas>
+
+      <header class="hud-top">
+        <div class="hud-left">
+          <a class="brand" href="https://vyke.design" target="_blank" rel="noopener" aria-label="Vyke">
+            <img src="assets/vyke-logo.svg" alt="Vyke" />
+          </a>
+          <div class="status">
+            <span class="dot"></span>
+            <span>LIVE · INTERACTIVE</span>
+          </div>
+          <div class="swap-hint">CLICK A PACKAGE TO PREVIEW</div>
+        </div>
+        <div class="hud-right">
+          <div>N 52.6953°</div>
+          <div>E 6.1940°</div>
+          <div class="muted">Meppel · NL</div>
+        </div>
+      </header>
+
+      <section class="meta">
+        <div class="kicker"><span id="kicker">PACKAGING · SHOWROOM</span></div>
+        <h1 class="title" id="title"><span class="title-main">Packaging</span><span class="title-accent">Universe</span></h1>
+        <div class="loaded" id="loaded">Click an item on the shelf to bring it forward. Click again to place it back.</div>
+      </section>
+
+      <div id="dropzone" class="dropzone-hint">Drop a .glb file anywhere</div>
+      <div id="toast" class="toast"></div>
+    </main>
+
+    <script type="module" src="main.js"></script>
+  </body>
+</html>

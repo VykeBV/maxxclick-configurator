@@ -29,6 +29,39 @@ const PRODUCTS = [
     src: 'models/Batavia_Maxxclick_Storage_Bins.glb',
     type: 'attachment',
   },
+  // TODO: rename these once we identify which Maxxclick SKUs they are.
+  {
+    id: 'attachment-1',
+    name: 'Attachment 1',
+    price: '€9.99',
+    priceValue: 9.99,
+    src: 'models/Maxxclick-attachment-1.glb',
+    type: 'attachment',
+  },
+  {
+    id: 'attachment-2',
+    name: 'Attachment 2',
+    price: '€9.99',
+    priceValue: 9.99,
+    src: 'models/Maxxclick-attachment-2.glb',
+    type: 'attachment',
+  },
+  {
+    id: 'attachment-3',
+    name: 'Attachment 3',
+    price: '€9.99',
+    priceValue: 9.99,
+    src: 'models/Maxxclick-attachment-3.glb',
+    type: 'attachment',
+  },
+  {
+    id: 'attachment-4',
+    name: 'Attachment 4',
+    price: '€9.99',
+    priceValue: 9.99,
+    src: 'models/Maxxclick-attachment-4.glb',
+    type: 'attachment',
+  },
 ];
 const PRODUCT_BY_ID = Object.fromEntries(PRODUCTS.map((p) => [p.id, p]));
 
@@ -234,13 +267,24 @@ function normalizeRail(clone) {
 
 // Fit an attachment to a rail: the GLBs are authored with the tool-facing side
 // at +Z, but mounted on a wall-rail we want the tool-facing side pointing OUT,
-// away from the wall. So we rotate 180° around Y, then shift the origin so the
-// (new) back face — which is the original +Z face — lands at local z=0. Setting
-// world position to (railX, railCenterY, railFrontZ) flushes the mounting face
-// to the rail front, and the tool/body extends forward toward the camera.
+// away from the wall. So we rotate 180° around Y, then auto-scale so the model
+// height lands in a sane range relative to the rail (different source models
+// come at wildly different scales), then shift the origin so the back face
+// — which is now the original +Z face — lands at local z=0. Setting world
+// position to (railX, railCenterY, railFrontZ) flushes the mounting face to
+// the rail front, and the tool/body extends forward toward the camera.
+const ATTACHMENT_TARGET_HEIGHT = 0.16; // ~16 cm, typical for a Maxxclick accessory
 function fitAttachmentToRail(obj, _rail) {
   obj.rotation.y = Math.PI;
   obj.updateMatrixWorld(true);
+
+  // Normalize by Y so attachments authored at any scale come out the same size
+  const raw = new THREE.Box3().setFromObject(obj);
+  const rawSize = raw.getSize(new THREE.Vector3());
+  const scale = ATTACHMENT_TARGET_HEIGHT / Math.max(rawSize.y, 0.001);
+  obj.scale.setScalar(scale);
+  obj.updateMatrixWorld(true);
+
   const bb = new THREE.Box3().setFromObject(obj);
   const center = bb.getCenter(new THREE.Vector3());
 
