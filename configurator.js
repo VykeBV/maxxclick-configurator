@@ -271,19 +271,23 @@ function normalizeRail(clone) {
   };
 }
 
-// Build a placeable attachment: rotate and scale the model, then wrap it in
-// an outer Group whose local origin is the attachment's TOP-BACK-CENTRE. The
-// caller sets that outer group's world position to (railX, rail.bbox.max.y,
-// rail.frontZ) — so the top of the attachment lands at the top of the rail,
-// the back face flushes to the rail front, and the body hangs below. This
-// matches how Maxxclick accessories physically clip onto the rail.
+// Build a placeable attachment: rotate, scale, then anchor it so the top edge
+// of the MOUNT PLATE — not the top of the whole model — lines up at local
+// y=0. The caller places that local origin at (railX, rail.bbox.max.y,
+// rail.frontZ). Effect: the plate covers the rail's front face from rail-top
+// down, any clip cap or hood extends ABOVE the rail (wrapping around its top
+// edge as it does on the real product), and the body hangs below.
 //
-// Why the wrapper: setting `instance.position.set(...)` on a single GLB root
-// throws away any earlier `instance.position -= …` offsets, since `.set()`
-// replaces the vector. Wrapping the GLB in an outer group means the offsets
-// live on the inner (child) and `.set()` lands on the outer (parent), so the
-// shifts survive.
+// "Plate top" is found by slicing the model's vertices closest to the back
+// face — the cap/hood lives slightly forward of the plate so it falls out of
+// the slice naturally. For monolithic attachments like the storage bin, the
+// back face covers the full Y of the model, so plate-top equals model-top
+// and behaviour is unchanged from a simple top-anchor.
+//
+// The outer wrapping group in makeAttachmentInstance() keeps these `.position`
+// shifts alive when the caller does `outer.position.set(...)` on the group.
 const ATTACHMENT_TARGET_HEIGHT = 0.16; // ~16 cm — Maxxclick accessory scale
+const BACK_SLICE_FRAC = 0.04;          // sample the first 4% of depth as "back"
 
 function fitAttachmentToRail(obj, _rail, product) {
   obj.rotation.y = product?.rotationY ?? 0;
@@ -296,10 +300,36 @@ function fitAttachmentToRail(obj, _rail, product) {
   obj.updateMatrixWorld(true);
 
   const bb = new THREE.Box3().setFromObject(obj);
+  const back = measureBackFaceY(obj, BACK_SLICE_FRAC);
   const xCenter = (bb.min.x + bb.max.x) / 2;
   obj.position.x -= xCenter;
-  obj.position.y -= bb.max.y; // top of model → local y=0
-  obj.position.z -= bb.min.z; // back face   → local z=0
+  obj.position.y -= back.maxY; // plate top → local y=0 (cap/hood extends above)
+  obj.position.z -= bb.min.z;  // back face → local z=0
+}
+
+const _tmpVec = new THREE.Vector3();
+function measureBackFaceY(obj, sliceFrac) {
+  const bb = new THREE.Box3().setFromObject(obj);
+  const backZThreshold = bb.min.z + (bb.max.z - bb.min.z) * sliceFrac;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  let any = false;
+  obj.traverse((o) => {
+    if (!o.isMesh || !o.geometry) return;
+    o.updateMatrixWorld(true);
+    const pos = o.geometry.attributes.position;
+    if (!pos) return;
+    for (let i = 0; i < pos.count; i++) {
+      _tmpVec.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+      if (_tmpVec.z <= backZThreshold) {
+        if (_tmpVec.y < minY) minY = _tmpVec.y;
+        if (_tmpVec.y > maxY) maxY = _tmpVec.y;
+        any = true;
+      }
+    }
+  });
+  if (!any) { minY = bb.min.y; maxY = bb.max.y; }
+  return { minY, maxY };
 }
 
 function makeAttachmentInstance(proto, product, rail) {
