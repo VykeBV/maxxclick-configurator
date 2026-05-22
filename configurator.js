@@ -14,6 +14,10 @@ const PRODUCTS = [
     src: 'models/Maxxclick-rail.glb',
     type: 'rail',
   },
+  // rotationY orients each GLB so its mount face points at the wall (-Z) and
+  // its body faces the viewer (+Z). Values were determined by inspecting each
+  // model's geometry — see inspect.html. forceColor overrides the GLB's baked
+  // textures with a flat finish (used to render the wire hooks in matte black).
   {
     id: 'adapter',
     name: 'Tool & Battery Adapter',
@@ -21,21 +25,8 @@ const PRODUCTS = [
     priceValue: 24.99,
     src: 'models/Maxxclick-adapter.glb',
     type: 'attachment',
-    rotationY: Math.PI,
+    rotationY: 0, // H-channel mount already faces -Z
   },
-  {
-    id: 'bins',
-    name: 'Storage Bins (3 pcs)',
-    price: '€9.99',
-    priceValue: 9.99,
-    src: 'models/Batavia_Maxxclick_Storage_Bins.glb',
-    type: 'attachment',
-    rotationY: 0,
-  },
-  // TODO: rename these once we identify which Maxxclick SKUs they are.
-  // mountStyle: 'hook' → scales so the back mount plate matches the rail's
-  //   height (the body extends naturally below); forces a matte black finish.
-  // mountStyle: 'plate' (default) → scales the whole model to a fixed height.
   {
     id: 'attachment-1',
     name: 'Attachment 1',
@@ -43,7 +34,7 @@ const PRODUCTS = [
     priceValue: 9.99,
     src: 'models/Maxxclick-attachment-1.glb',
     type: 'attachment',
-    rotationY: Math.PI,
+    rotationY: -Math.PI / 2, // mount plate authored at -X
     forceColor: 0x161616,
   },
   {
@@ -53,7 +44,7 @@ const PRODUCTS = [
     priceValue: 9.99,
     src: 'models/Maxxclick-attachment-2.glb',
     type: 'attachment',
-    rotationY: Math.PI,
+    rotationY: -Math.PI / 2, // mount plate authored at -X
     forceColor: 0x161616,
   },
   {
@@ -63,7 +54,8 @@ const PRODUCTS = [
     priceValue: 9.99,
     src: 'models/Maxxclick-attachment-3.glb',
     type: 'attachment',
-    rotationY: 0,
+    rotationY: Math.PI, // mount plate authored at +Z
+    forceColor: 0x161616,
   },
   {
     id: 'attachment-4',
@@ -72,7 +64,7 @@ const PRODUCTS = [
     priceValue: 9.99,
     src: 'models/Maxxclick-attachment-4.glb',
     type: 'attachment',
-    rotationY: 0,
+    rotationY: Math.PI, // bin back authored at +Z
   },
 ];
 const PRODUCT_BY_ID = Object.fromEntries(PRODUCTS.map((p) => [p.id, p]));

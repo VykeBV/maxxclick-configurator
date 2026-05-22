@@ -6,3 +6,5 @@
 node_modules/
 vyke/
 models-raw/
+inspect.html
+inspect.js
