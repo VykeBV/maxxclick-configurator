@@ -64,7 +64,7 @@ const PRODUCTS = [
     priceValue: 9.99,
     src: 'models/Maxxclick-attachment-4.glb',
     type: 'attachment',
-    rotationY: Math.PI, // bin back authored at +Z
+    rotationY: 0, // bin opens toward camera in its native orientation
   },
 ];
 const PRODUCT_BY_ID = Object.fromEntries(PRODUCTS.map((p) => [p.id, p]));
