@@ -26,6 +26,7 @@ const PRODUCTS = [
     src: 'models/Maxxclick-adapter.glb',
     type: 'attachment',
     rotationY: 0, // H-channel mount already faces -Z
+    mountStyle: 'plate-fill',
   },
   {
     id: 'attachment-1',
@@ -65,6 +66,7 @@ const PRODUCTS = [
     src: 'models/Maxxclick-attachment-4.glb',
     type: 'attachment',
     rotationY: 0, // bin opens toward camera in its native orientation
+    mountStyle: 'plate-fill',
   },
 ];
 const PRODUCT_BY_ID = Object.fromEntries(PRODUCTS.map((p) => [p.id, p]));
@@ -271,31 +273,41 @@ function normalizeRail(clone) {
   };
 }
 
-// Build a placeable attachment: rotate, scale, then anchor it so the top edge
-// of the MOUNT PLATE — not the top of the whole model — lines up at local
-// y=0. The caller places that local origin at (railX, rail.bbox.max.y,
-// rail.frontZ). Effect: the plate covers the rail's front face from rail-top
-// down, any clip cap or hood extends ABOVE the rail (wrapping around its top
-// edge as it does on the real product), and the body hangs below.
+// Build a placeable attachment: rotate, scale, then anchor the plate top at
+// local y=0. The caller places that local origin at (railX, rail.bbox.max.y,
+// rail.frontZ) — top of plate at top of rail, back face flush, body hanging
+// below. Two scaling strategies, picked per product via mountStyle:
 //
-// "Plate top" is found by slicing the model's vertices closest to the back
-// face — the cap/hood lives slightly forward of the plate so it falls out of
-// the slice naturally. For monolithic attachments like the storage bin, the
-// back face covers the full Y of the model, so plate-top equals model-top
-// and behaviour is unchanged from a simple top-anchor.
+//   mountStyle: 'plate-fill' — scale uniformly so the back-face slice (plate)
+//     matches the rail's vertical height. Right for monolithic attachments
+//     like the bin and adapter, whose back face spans the full Y of the model.
+//     End result: the model itself is rail-height tall and the back panel
+//     covers the rail face exactly.
 //
-// The outer wrapping group in makeAttachmentInstance() keeps these `.position`
-// shifts alive when the caller does `outer.position.set(...)` on the group.
-const ATTACHMENT_TARGET_HEIGHT = 0.16; // ~16 cm — Maxxclick accessory scale
-const BACK_SLICE_FRAC = 0.04;          // sample the first 4% of depth as "back"
+//   mountStyle: undefined (default, used for hooks) — scale uniformly so the
+//     TOTAL model height lands at ATTACHMENT_TARGET_HEIGHT. Hooks have a tiny
+//     mount plate and long prongs; plate-fill scaling would explode the prongs
+//     to several metres. Their plate stays small relative to the rail but the
+//     hook stays a sensible size overall.
+const BACK_SLICE_FRAC = 0.04;          // first 4% of depth = back face
+const ATTACHMENT_TARGET_HEIGHT = 0.16; // ~16 cm — for hooks that can't plate-fill
 
-function fitAttachmentToRail(obj, _rail, product) {
+function fitAttachmentToRail(obj, rail, product) {
   obj.rotation.y = product?.rotationY ?? 0;
   obj.updateMatrixWorld(true);
 
   const raw = new THREE.Box3().setFromObject(obj);
   const rawSize = raw.getSize(new THREE.Vector3());
-  const scale = ATTACHMENT_TARGET_HEIGHT / Math.max(rawSize.y, 0.001);
+
+  let scale;
+  if (product?.mountStyle === 'plate-fill') {
+    const back0 = measureBackFaceY(obj, BACK_SLICE_FRAC);
+    const platePre = Math.max(back0.maxY - back0.minY, 0.001);
+    const railSize = rail.bbox.getSize(new THREE.Vector3());
+    scale = railSize.y / platePre;
+  } else {
+    scale = ATTACHMENT_TARGET_HEIGHT / Math.max(rawSize.y, 0.001);
+  }
   obj.scale.setScalar(scale);
   obj.updateMatrixWorld(true);
 
@@ -303,7 +315,7 @@ function fitAttachmentToRail(obj, _rail, product) {
   const back = measureBackFaceY(obj, BACK_SLICE_FRAC);
   const xCenter = (bb.min.x + bb.max.x) / 2;
   obj.position.x -= xCenter;
-  obj.position.y -= back.maxY; // plate top → local y=0 (cap/hood extends above)
+  obj.position.y -= back.maxY; // plate top → local y=0
   obj.position.z -= bb.min.z;  // back face → local z=0
 }
 
