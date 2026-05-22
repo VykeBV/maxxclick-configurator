@@ -54,7 +54,7 @@ const PRODUCTS = [
     priceValue: 9.99,
     src: 'models/Maxxclick-attachment-3.glb',
     type: 'attachment',
-    rotationY: Math.PI, // mount plate authored at +Z
+    rotationY: 0, // mount plate already faces -Z natively
     forceColor: 0x161616,
   },
   {
