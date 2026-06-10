@@ -40,6 +40,7 @@ const PRODUCTS = [
     targetHeight: 0.2,
     targetDepth: 0.3,
     capLift: 0.025,
+    zOffset: -0.03,
   },
   {
     id: 'attachment-2',
@@ -53,6 +54,7 @@ const PRODUCTS = [
     targetHeight: 0.2,
     targetDepth: 0.3,
     capLift: 0.025,
+    zOffset: -0.03,
   },
   {
     id: 'attachment-3',
@@ -66,6 +68,7 @@ const PRODUCTS = [
     targetHeight: 0.2,
     targetDepth: 0.3,
     capLift: 0.025,
+    zOffset: -0.03,
   },
   {
     id: 'attachment-4',
@@ -348,6 +351,13 @@ function fitAttachmentToRail(obj, rail, product) {
     obj.position.y -= bb.max.y - capLift; // model top → capLift above rail top
   }
   obj.position.z -= bb.min.z; // back face → local z=0
+
+  // Per-product push-back toward the wall, in metres. The hooks' clip cap
+  // curls BEHIND their mount plate, so the bbox-rearmost point is the cap lip,
+  // not the plate. Anchoring that lip at the rail front leaves the plate
+  // floating a few cm in front of the rail. A negative zOffset sinks the model
+  // until the plate touches the rail; the cap visually wraps the rail instead.
+  obj.position.z += product?.zOffset ?? 0;
 }
 
 const _tmpVec = new THREE.Vector3();
