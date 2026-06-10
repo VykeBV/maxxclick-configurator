@@ -40,7 +40,7 @@ const PRODUCTS = [
     targetHeight: 0.2,
     targetDepth: 0.3,
     capLift: 0.025,
-    zOffset: -0.03,
+    zOffset: -0.014, // one rail depth: cap + bottom lip sit in the rail grooves
   },
   {
     id: 'attachment-2',
@@ -54,7 +54,7 @@ const PRODUCTS = [
     targetHeight: 0.2,
     targetDepth: 0.3,
     capLift: 0.025,
-    zOffset: -0.03,
+    zOffset: -0.014, // one rail depth: cap + bottom lip sit in the rail grooves
   },
   {
     id: 'attachment-3',
@@ -68,7 +68,7 @@ const PRODUCTS = [
     targetHeight: 0.2,
     targetDepth: 0.3,
     capLift: 0.025,
-    zOffset: -0.03,
+    zOffset: -0.014, // one rail depth: cap + bottom lip sit in the rail grooves
   },
   {
     id: 'attachment-4',
