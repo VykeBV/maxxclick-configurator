@@ -37,6 +37,9 @@ const PRODUCTS = [
     type: 'attachment',
     rotationY: -Math.PI / 2, // mount plate authored at -X
     forceColor: 0x161616,
+    targetHeight: 0.2,
+    targetDepth: 0.3,
+    capLift: 0.025,
   },
   {
     id: 'attachment-2',
@@ -47,6 +50,9 @@ const PRODUCTS = [
     type: 'attachment',
     rotationY: -Math.PI / 2, // mount plate authored at -X
     forceColor: 0x161616,
+    targetHeight: 0.2,
+    targetDepth: 0.3,
+    capLift: 0.025,
   },
   {
     id: 'attachment-3',
@@ -57,6 +63,9 @@ const PRODUCTS = [
     type: 'attachment',
     rotationY: 0, // mount plate already faces -Z natively
     forceColor: 0x161616,
+    targetHeight: 0.2,
+    targetDepth: 0.3,
+    capLift: 0.025,
   },
   {
     id: 'attachment-4',
@@ -273,24 +282,27 @@ function normalizeRail(clone) {
   };
 }
 
-// Build a placeable attachment: rotate, scale, then anchor the plate top at
-// local y=0. The caller places that local origin at (railX, rail.bbox.max.y,
-// rail.frontZ) — top of plate at top of rail, back face flush, body hanging
-// below. Two scaling strategies, picked per product via mountStyle:
+// Build a placeable attachment: rotate, scale, then anchor it so the caller
+// can place local (0,0,0) at (railX, rail.bbox.max.y, rail.frontZ). Scaling is
+// per-product because the source GLBs are authored at unrelated scales and,
+// for the hooks, with prongs disproportionately long vs the real product:
 //
 //   mountStyle: 'plate-fill' — scale uniformly so the back-face slice (plate)
-//     matches the rail's vertical height. Right for monolithic attachments
-//     like the bin and adapter, whose back face spans the full Y of the model.
-//     End result: the model itself is rail-height tall and the back panel
-//     covers the rail face exactly.
+//     matches the rail's vertical height. For monolithic attachments (bin,
+//     adapter) whose back panel spans the model's full height; the panel ends
+//     up covering the rail face exactly.
 //
-//   mountStyle: undefined (default, used for hooks) — scale uniformly so the
-//     TOTAL model height lands at ATTACHMENT_TARGET_HEIGHT. Hooks have a tiny
-//     mount plate and long prongs; plate-fill scaling would explode the prongs
-//     to several metres. Their plate stays small relative to the rail but the
-//     hook stays a sensible size overall.
-const BACK_SLICE_FRAC = 0.04;          // first 4% of depth = back face
-const ATTACHMENT_TARGET_HEIGHT = 0.16; // ~16 cm — for hooks that can't plate-fill
+//   targetHeight/targetDepth — explicit physical size in metres. Y and X scale
+//     to targetHeight; Z scales independently to targetDepth, deliberately
+//     compressing the hooks' over-long prongs to realistic Maxxclick
+//     proportions (~30 cm from the wall). A slight non-uniform squash on a
+//     curved tube reads fine visually.
+//
+//   capLift — metres of the model's top (the clip cap) that should sit ABOVE
+//     the rail's top edge, wrapping over it like the real clip. Anchor is
+//     model-top minus capLift.
+const BACK_SLICE_FRAC = 0.04; // first 4% of depth = back face
+const FALLBACK_HEIGHT = 0.16;
 
 function fitAttachmentToRail(obj, rail, product) {
   obj.rotation.y = product?.rotationY ?? 0;
@@ -298,25 +310,44 @@ function fitAttachmentToRail(obj, rail, product) {
 
   const raw = new THREE.Box3().setFromObject(obj);
   const rawSize = raw.getSize(new THREE.Vector3());
+  const railSize = rail.bbox.getSize(new THREE.Vector3());
 
-  let scale;
+  let scaleXY;
+  let scaleZ;
   if (product?.mountStyle === 'plate-fill') {
     const back0 = measureBackFaceY(obj, BACK_SLICE_FRAC);
     const platePre = Math.max(back0.maxY - back0.minY, 0.001);
-    const railSize = rail.bbox.getSize(new THREE.Vector3());
-    scale = railSize.y / platePre;
+    scaleXY = railSize.y / platePre;
+    scaleZ = scaleXY;
   } else {
-    scale = ATTACHMENT_TARGET_HEIGHT / Math.max(rawSize.y, 0.001);
+    const targetH = product?.targetHeight ?? FALLBACK_HEIGHT;
+    scaleXY = targetH / Math.max(rawSize.y, 0.001);
+    scaleZ = product?.targetDepth
+      ? product.targetDepth / Math.max(rawSize.z, 0.001)
+      : scaleXY;
   }
-  obj.scale.setScalar(scale);
+  // scale.set() works in LOCAL space, which is rotated by rotationY before
+  // reaching world space. For ±90° rotations the local X/Z axes swap roles in
+  // world space, so the depth scale must target local X there.
+  if (Math.abs(Math.sin(obj.rotation.y)) > 0.5) {
+    obj.scale.set(scaleZ, scaleXY, scaleXY);
+  } else {
+    obj.scale.set(scaleXY, scaleXY, scaleZ);
+  }
   obj.updateMatrixWorld(true);
 
   const bb = new THREE.Box3().setFromObject(obj);
-  const back = measureBackFaceY(obj, BACK_SLICE_FRAC);
   const xCenter = (bb.min.x + bb.max.x) / 2;
   obj.position.x -= xCenter;
-  obj.position.y -= back.maxY; // plate top → local y=0
-  obj.position.z -= bb.min.z;  // back face → local z=0
+
+  if (product?.mountStyle === 'plate-fill') {
+    const back = measureBackFaceY(obj, BACK_SLICE_FRAC);
+    obj.position.y -= back.maxY; // plate top → local y=0
+  } else {
+    const capLift = product?.capLift ?? 0;
+    obj.position.y -= bb.max.y - capLift; // model top → capLift above rail top
+  }
+  obj.position.z -= bb.min.z; // back face → local z=0
 }
 
 const _tmpVec = new THREE.Vector3();
@@ -1370,3 +1401,6 @@ tick();
 
 updateCart();
 boot();
+
+// Debug handle for development tooling (harmless in production).
+window.__cfg = { scene, rails, placedAttachments, camera, controls, THREE };
