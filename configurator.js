@@ -208,10 +208,13 @@ const loader = new GLTFLoader();
 loader.setMeshoptDecoder(MeshoptDecoder);
 const prototypeCache = new Map();
 
+// Bump when any .glb changes — busts the browser HTTP cache for model files.
+const MODEL_VERSION = 3;
+
 function getPrototype(src) {
   if (!prototypeCache.has(src)) {
     const p = new Promise((resolve, reject) => {
-      loader.load(src, (gltf) => {
+      loader.load(`${src}?v=${MODEL_VERSION}`, (gltf) => {
         prepareMesh(gltf.scene);
         resolve(gltf.scene);
       }, undefined, reject);
